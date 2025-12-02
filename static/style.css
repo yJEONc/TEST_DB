@@ -122,7 +122,7 @@ body {
     box-shadow: 0 20px 25px -5px rgba(59,130,246,0.5);
 }
 
-/* 단원 목록 */
+/* 단원 목록 카드 */
 
 .units-section {
     background: #ffffff;
@@ -178,12 +178,13 @@ body {
     color: #111827;
 }
 
-/* 반응형 약간 */
+/* 반응형 */
 
 @media (max-width: 900px) {
     .app-container {
         flex-direction: column;
     }
+
     .sidebar {
         width: 100%;
         flex-direction: row;

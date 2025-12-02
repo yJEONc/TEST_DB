@@ -4,17 +4,30 @@ let unitsByGrade = {};
 
 let selectedGrade = null;
 let selectedSchool = null;
-let selectedUnits = new Set(); // "number|unit" 형식으로 저장
+let selectedUnits = new Set(); // "number|unit" 형태로 저장
 
 async function fetchData() {
-    const res = await fetch("/api/data");
-    const data = await res.json();
-    grades = data.grades || [];
-    schools = data.schools || [];
-    unitsByGrade = data.unitsByGrade || {};
-    renderGradeList();
-    renderSchoolList();
-    renderUnits();
+    try {
+        const res = await fetch("/api/data");
+        const data = await res.json();
+
+        if (!data.ok) {
+            console.error("API error:", data);
+            alert("데이터 로딩 중 오류가 발생했습니다.\n" + (data.error || ""));
+            return;
+        }
+
+        grades = data.grades || [];
+        schools = data.schools || [];
+        unitsByGrade = data.unitsByGrade || {};
+
+        renderGradeList();
+        renderSchoolList();
+        renderUnits();
+    } catch (err) {
+        console.error(err);
+        alert("서버와 통신 중 오류가 발생했습니다.");
+    }
 }
 
 function renderGradeList() {
@@ -26,8 +39,7 @@ function renderGradeList() {
         li.textContent = `중학교 ${g}학년`;
         li.onclick = () => {
             selectedGrade = g;
-            // 학년 바꿀 때 단원 선택 초기화
-            selectedUnits.clear();
+            selectedUnits.clear(); // 학년 변경 시 선택 초기화
             renderGradeList();
             renderUnits();
             updateSummary();
@@ -101,7 +113,6 @@ function renderUnits() {
         nameSpan.textContent = item.unit;
 
         wrapper.onclick = (e) => {
-            // 체크박스 직접 클릭이 아니면 토글
             if (e.target !== checkbox) {
                 checkbox.checked = !checkbox.checked;
                 checkbox.onchange();
@@ -151,21 +162,21 @@ async function saveSelection() {
         units
     };
 
-    const res = await fetch("/api/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-    });
-
-    const data = await res.json();
-    if (data.ok) {
-        alert(`저장 완료! (${data.saved}개 단원)`);
-        // 저장 후 선택 유지하거나 초기화하는 건 취향대로
-        // selectedUnits.clear();
-        // renderUnits();
-        // updateSaveButton();
-    } else {
-        alert("저장 중 오류: " + (data.error || "알 수 없는 오류"));
+    try {
+        const res = await fetch("/api/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+            alert(`저장 완료! (${data.saved}개 단원)`);
+        } else {
+            alert("저장 중 오류: " + (data.error || "알 수 없는 오류"));
+        }
+    } catch (err) {
+        console.error(err);
+        alert("저장 요청 중 오류가 발생했습니다.");
     }
 }
 
