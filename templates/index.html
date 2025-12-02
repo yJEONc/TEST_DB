@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>중학교 과학 단원 선택</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="app-container">
+    <!-- 사이드바: 학년 + 학교 -->
+    <aside class="sidebar">
+        <div class="sidebar-section">
+            <h2 class="sidebar-title">학년</h2>
+            <ul id="gradeList" class="sidebar-list">
+                <!-- JS로 채움 -->
+            </ul>
+        </div>
+        <div class="sidebar-section">
+            <h2 class="sidebar-title">학교</h2>
+            <ul id="schoolList" class="sidebar-list">
+                <!-- JS로 채움 -->
+            </ul>
+        </div>
+    </aside>
+
+    <!-- 메인 영역 -->
+    <main class="main-content">
+        <header class="main-header">
+            <div>
+                <h1 class="app-title">중학교 과학 단원 선택</h1>
+                <p id="selectionSummary" class="summary-text">학년과 학교를 선택하세요.</p>
+            </div>
+            <button id="saveBtn" class="primary-btn" disabled>선택 저장</button>
+        </header>
+
+        <section class="units-section">
+            <h2 class="section-title">단원 목록</h2>
+            <div id="unitList" class="unit-list">
+                <!-- JS로 채움 -->
+            </div>
+        </section>
+    </main>
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
