@@ -56,15 +56,23 @@ function renderSchoolList() {
         const li = document.createElement("li");
         li.className = "sidebar-item" + (selectedSchool === school ? " active" : "");
         li.textContent = school;
+
         li.onclick = () => {
             selectedSchool = school;
+
+            // 🔥 추가: 학교 변경 시 단원 선택 초기화
+            selectedUnits.clear();
+            renderUnits();
+
             renderSchoolList();
             updateSummary();
             updateSaveButton();
         };
+
         ul.appendChild(li);
     });
 }
+
 
 function renderUnits() {
     const container = document.getElementById("unitList");
