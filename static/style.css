@@ -25,30 +25,10 @@ body {
     display: flex;
     flex-direction: column;
     gap: 24px;
-
-    /* ✅ 추가: 사이드바 전체 높이를 고정하고, 사이드바 자체 스크롤은 막음 */
-    height: 100vh;
-    overflow: hidden;
 }
 
 .sidebar-section {
     margin-bottom: 8px;
-
-    /* ✅ 추가: 제목(h2) + 리스트(ul)가 세로로 쌓이고,
-       두 번째 섹션(학교)이 남은 공간을 먹을 수 있게 준비 */
-    display: flex;
-    flex-direction: column;
-}
-
-/* ✅ 추가: 학년 섹션은 내용만큼만(고정) */
-.sidebar-section:first-child {
-    flex: 0 0 auto;
-}
-
-/* ✅ 추가: 학교 섹션은 남은 공간을 먹음 */
-.sidebar-section:last-child {
-    flex: 1 1 auto;
-    min-height: 0; /* ★ flex 스크롤 핵심 */
 }
 
 .sidebar-title {
@@ -65,19 +45,6 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
-}
-
-/* ✅ 추가: 학교 리스트만 독립 스크롤 */
-#schoolList {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    min-height: 0;      /* ★ 이것도 같이 주면 안정적 */
-    padding-right: 6px; /* (선택) 스크롤바로 글자 가림 방지 */
-}
-
-/* (보호) 학년 리스트는 스크롤이 생기지 않게 */
-#gradeList {
-    overflow: visible;
 }
 
 .sidebar-item {
@@ -155,6 +122,58 @@ body {
     box-shadow: 0 20px 25px -5px rgba(59,130,246,0.5);
 }
 
+/* ✅ 추가: 저장 버튼 오른쪽 영역(버튼 + 로딩바) */
+.header-actions{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    min-width: 220px; /* 로딩바 폭 확보 */
+}
+
+/* ✅ 추가: 저장 로딩바 */
+.save-loading{
+    display: none;            /* 기본 숨김 */
+    align-items: center;
+    gap: 10px;
+    width: 220px;             /* 버튼 아래에서 일정 폭 유지 */
+}
+
+.save-loading.active{
+    display: flex;
+}
+
+.save-loading-track{
+    position: relative;
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(59,130,246,0.18);
+    overflow: hidden;
+}
+
+.save-loading-bar{
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 35%;
+    border-radius: 999px;
+    background: #3b82f6;
+    animation: save-indeterminate 0.9s infinite ease-in-out;
+}
+
+.save-loading-text{
+    font-size: 12px;
+    color: #6b7280;
+    white-space: nowrap;
+}
+
+@keyframes save-indeterminate{
+    0%   { transform: translateX(-120%); }
+    100% { transform: translateX(360%); }
+}
+
 /* 단원 목록 카드 */
 
 .units-section {
@@ -222,69 +241,15 @@ body {
         width: 100%;
         flex-direction: row;
         overflow-x: auto;
-
-        /* ✅ 모바일에서는 기존 동작 유지가 더 중요하니,
-           위에서 준 height/overflow-hidden이 거슬릴 수 있어 해제 */
-        height: auto;
-        overflow: auto;
     }
 
-    /* ✅ 모바일에서 학교만 스크롤 규칙이 레이아웃을 망칠 수 있어 완화 */
-    .sidebar-section:last-child {
-        min-height: initial;
-        flex: 0 0 auto;
+    /* ✅ 모바일에서 로딩바 폭이 너무 딱딱하면 유연하게 */
+    .header-actions{
+        min-width: 0;
+        align-items: flex-start;
     }
 
-    #schoolList {
-        overflow-y: visible;
-        flex: 0 0 auto;
-        min-height: initial;
-        padding-right: 0;
+    .save-loading{
+        width: 100%;
     }
-    /* =========================
-   저장 로딩바 (선택 저장 클릭 시)
-   ========================= */
-
-.save-loading{
-    display: none;                /* 기본 숨김 */
-    align-items: center;
-    gap: 10px;
-    padding: 6px 2px 0 2px;       /* header 아래라 살짝 여백만 */
-}
-
-.save-loading.active{
-    display: flex;
-}
-
-.save-loading-track{
-    position: relative;
-    flex: 1;
-    height: 6px;
-    border-radius: 999px;
-    background: rgba(59,130,246,0.18);
-    overflow: hidden;
-}
-
-.save-loading-bar{
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 35%;
-    border-radius: 999px;
-    background: #3b82f6;
-    animation: save-indeterminate 0.9s infinite ease-in-out;
-}
-
-.save-loading-text{
-    font-size: 12px;
-    color: #6b7280;
-    white-space: nowrap;
-}
-
-@keyframes save-indeterminate{
-    0%   { transform: translateX(-120%); }
-    100% { transform: translateX(360%); }
-}
-
 }
