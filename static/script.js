@@ -6,6 +6,34 @@ let selectedGrade = null;
 let selectedSchool = null;
 let selectedUnits = new Set(); // "number|unit" 형태로 저장
 
+let isSaving = false;
+
+function setSavingUI(on) {
+    const loading = document.getElementById("saveLoading");
+    const btn = document.getElementById("saveBtn");
+    if (!btn) return;
+
+    if (on) {
+        isSaving = true;
+        if (loading) {
+            loading.classList.add("active");
+            loading.setAttribute("aria-hidden", "false");
+        }
+        btn.disabled = true; // ✅ 중복 클릭 방지
+        btn.dataset.prevText = btn.textContent;
+        btn.textContent = "저장 중...";
+    } else {
+        isSaving = false;
+        if (loading) {
+            loading.classList.remove("active");
+            loading.setAttribute("aria-hidden", "true");
+        }
+        btn.textContent = btn.dataset.prevText || "선택 저장";
+        // ✅ 현재 선택 상태에 맞춰 버튼 활성/비활성 복구
+        updateSaveButton();
+    }
+}
+
 async function fetchData() {
     try {
         const res = await fetch("/api/data");
@@ -24,27 +52,36 @@ async function fetchData() {
         renderGradeList();
         renderSchoolList();
         renderUnits();
+        updateSummary();
+        updateSaveButton();
     } catch (err) {
         console.error(err);
-        alert("서버와 통신 중 오류가 발생했습니다.");
+        alert("데이터 로딩 중 오류가 발생했습니다.");
     }
 }
 
 function renderGradeList() {
     const ul = document.getElementById("gradeList");
     ul.innerHTML = "";
-    grades.forEach(g => {
+
+    grades.forEach(grade => {
         const li = document.createElement("li");
-        li.className = "sidebar-item" + (selectedGrade === g ? " active" : "");
-        li.textContent = `중학교 ${g}학년`;
-        li.onclick = () => {
-            selectedGrade = g;
+        li.className = "sidebar-item";
+        li.textContent = grade;
+
+        if (grade === selectedGrade) li.classList.add("active");
+
+        li.addEventListener("click", () => {
+            selectedGrade = grade;
+            selectedSchool = null;
             selectedUnits.clear(); // 학년 변경 시 선택 초기화
             renderGradeList();
+            renderSchoolList();
             renderUnits();
             updateSummary();
             updateSaveButton();
-        };
+        });
+
         ul.appendChild(li);
     });
 }
@@ -52,65 +89,61 @@ function renderGradeList() {
 function renderSchoolList() {
     const ul = document.getElementById("schoolList");
     ul.innerHTML = "";
+
     schools.forEach(school => {
         const li = document.createElement("li");
-        li.className = "sidebar-item" + (selectedSchool === school ? " active" : "");
+        li.className = "sidebar-item";
         li.textContent = school;
 
-        li.onclick = () => {
+        if (school === selectedSchool) li.classList.add("active");
+
+        li.addEventListener("click", () => {
             selectedSchool = school;
-
-            // 🔥 추가: 학교 변경 시 단원 선택 초기화
-            selectedUnits.clear();
-            renderUnits();
-
+            selectedUnits.clear(); // 학교 변경 시 단원 선택 초기화
             renderSchoolList();
+            renderUnits();
             updateSummary();
             updateSaveButton();
-        };
+        });
 
         ul.appendChild(li);
     });
 }
-
 
 function renderUnits() {
     const container = document.getElementById("unitList");
     container.innerHTML = "";
 
     if (!selectedGrade) {
-        const p = document.createElement("p");
-        p.textContent = "왼쪽에서 학년을 먼저 선택하세요.";
-        p.style.fontSize = "14px";
-        p.style.color = "#6b7280";
-        container.appendChild(p);
+        container.innerHTML = "<p style='color:#6b7280;font-size:14px;'>먼저 학년을 선택하세요.</p>";
         return;
     }
 
-    const list = unitsByGrade[selectedGrade] || [];
-    if (list.length === 0) {
-        const p = document.createElement("p");
-        p.textContent = "등록된 단원이 없습니다.";
-        container.appendChild(p);
+    const units = unitsByGrade[selectedGrade] || [];
+    if (units.length === 0) {
+        container.innerHTML = "<p style='color:#6b7280;font-size:14px;'>해당 학년의 단원 데이터가 없습니다.</p>";
         return;
     }
 
-    list.forEach(item => {
+    units.forEach(item => {
         const key = `${item.number}|${item.unit}`;
-        const wrapper = document.createElement("div");
-        wrapper.className = "unit-item";
+
+        const row = document.createElement("label");
+        row.className = "unit-item";
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = selectedUnits.has(key);
-        checkbox.onchange = () => {
-            if (checkbox.checked) {
+
+        checkbox.addEventListener("change", (e) => {
+            if (e.target.checked) {
                 selectedUnits.add(key);
             } else {
                 selectedUnits.delete(key);
             }
+            updateSummary();
             updateSaveButton();
-        };
+        });
 
         const codeSpan = document.createElement("span");
         codeSpan.className = "unit-code";
@@ -120,31 +153,22 @@ function renderUnits() {
         nameSpan.className = "unit-name";
         nameSpan.textContent = item.unit;
 
-        wrapper.onclick = (e) => {
-            if (e.target !== checkbox) {
-                checkbox.checked = !checkbox.checked;
-                checkbox.onchange();
-            }
-        };
+        row.appendChild(checkbox);
+        row.appendChild(codeSpan);
+        row.appendChild(nameSpan);
 
-        wrapper.appendChild(checkbox);
-        wrapper.appendChild(codeSpan);
-        wrapper.appendChild(nameSpan);
-        container.appendChild(wrapper);
+        container.appendChild(row);
     });
 }
 
 function updateSummary() {
     const summary = document.getElementById("selectionSummary");
-    if (selectedGrade && selectedSchool) {
-        summary.textContent = `중학교 ${selectedGrade}학년 / ${selectedSchool}`;
-    } else if (selectedGrade) {
-        summary.textContent = `중학교 ${selectedGrade}학년을 선택했습니다. 학교를 선택하세요.`;
-    } else if (selectedSchool) {
-        summary.textContent = `${selectedSchool}을(를) 선택했습니다. 학년을 선택하세요.`;
-    } else {
-        summary.textContent = "학년과 학교를 선택하세요.";
-    }
+
+    const gradeText = selectedGrade ? `학년: ${selectedGrade}` : "학년: (미선택)";
+    const schoolText = selectedSchool ? `학교: ${selectedSchool}` : "학교: (미선택)";
+    const unitCount = selectedUnits.size;
+
+    summary.textContent = `${gradeText} / ${schoolText} / 선택 단원: ${unitCount}개`;
 }
 
 function updateSaveButton() {
@@ -157,7 +181,10 @@ function updateSaveButton() {
 }
 
 async function saveSelection() {
+    if (isSaving) return; // ✅ 이미 저장 중이면 무시
     if (!selectedGrade || !selectedSchool || selectedUnits.size === 0) return;
+
+    setSavingUI(true);
 
     const units = Array.from(selectedUnits).map(key => {
         const [number, unit] = key.split("|");
@@ -185,6 +212,8 @@ async function saveSelection() {
     } catch (err) {
         console.error(err);
         alert("저장 요청 중 오류가 발생했습니다.");
+    } finally {
+        setSavingUI(false);
     }
 }
 
