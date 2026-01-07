@@ -241,4 +241,50 @@ body {
         min-height: initial;
         padding-right: 0;
     }
+    /* =========================
+   저장 로딩바 (선택 저장 클릭 시)
+   ========================= */
+
+.save-loading{
+    display: none;                /* 기본 숨김 */
+    align-items: center;
+    gap: 10px;
+    padding: 6px 2px 0 2px;       /* header 아래라 살짝 여백만 */
+}
+
+.save-loading.active{
+    display: flex;
+}
+
+.save-loading-track{
+    position: relative;
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(59,130,246,0.18);
+    overflow: hidden;
+}
+
+.save-loading-bar{
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 35%;
+    border-radius: 999px;
+    background: #3b82f6;
+    animation: save-indeterminate 0.9s infinite ease-in-out;
+}
+
+.save-loading-text{
+    font-size: 12px;
+    color: #6b7280;
+    white-space: nowrap;
+}
+
+@keyframes save-indeterminate{
+    0%   { transform: translateX(-120%); }
+    100% { transform: translateX(360%); }
+}
+
 }
