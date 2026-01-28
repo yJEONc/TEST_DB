@@ -23,6 +23,8 @@ function setSavingUI(on) {
         }
 
         btn.disabled = true; // 중복 클릭 방지
+        btn.dataset.prevText = btn.textContent;
+        btn.textContent = "저장 중...";
 
     } else {
         isSaving = false;
