@@ -15,20 +15,39 @@ body {
     min-height: 100vh;
 }
 
-/* 사이드바 */
+/* ======================
+   사이드바
+   ====================== */
 
 .sidebar {
     width: 260px;
     background: #020617;
     color: #e5e7eb;
     padding: 24px 16px;
+
     display: flex;
     flex-direction: column;
     gap: 24px;
+
+    height: 100vh;        /* 화면 높이 고정 */
+    overflow: hidden;     /* 사이드바 자체는 스크롤 금지 */
 }
 
 .sidebar-section {
+    display: flex;
+    flex-direction: column;
     margin-bottom: 8px;
+}
+
+/* 학년 섹션은 고정 */
+.sidebar-section:first-child {
+    flex: 0 0 auto;
+}
+
+/* 학교 섹션은 남은 공간 차지 */
+.sidebar-section:last-child {
+    flex: 1 1 auto;
+    min-height: 0;        /* ⭐ flex + scroll 핵심 */
 }
 
 .sidebar-title {
@@ -45,6 +64,19 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+/* 학교 리스트만 독립 스크롤 */
+#schoolList {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;        /* ⭐ 필수 */
+    padding-right: 6px;  /* 스크롤바 겹침 방지 */
+}
+
+/* 학년 리스트는 스크롤 없음 */
+#gradeList {
+    overflow: visible;
 }
 
 .sidebar-item {
@@ -68,7 +100,9 @@ body {
     color: #f9fafb;
 }
 
-/* 메인 영역 */
+/* ======================
+   메인 영역
+   ====================== */
 
 .main-content {
     flex: 1;
@@ -95,7 +129,9 @@ body {
     color: #6b7280;
 }
 
-/* 버튼 */
+/* ======================
+   버튼
+   ====================== */
 
 .primary-btn {
     padding: 10px 18px;
@@ -122,59 +158,9 @@ body {
     box-shadow: 0 20px 25px -5px rgba(59,130,246,0.5);
 }
 
-/* ✅ 추가: 저장 버튼 오른쪽 영역(버튼 + 로딩바) */
-.header-actions{
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 10px;
-    min-width: 220px; /* 로딩바 폭 확보 */
-}
-
-/* ✅ 추가: 저장 로딩바 */
-.save-loading{
-    display: none;            /* 기본 숨김 */
-    align-items: center;
-    gap: 10px;
-    width: 220px;             /* 버튼 아래에서 일정 폭 유지 */
-}
-
-.save-loading.active{
-    display: flex;
-}
-
-.save-loading-track{
-    position: relative;
-    flex: 1;
-    height: 6px;
-    border-radius: 999px;
-    background: rgba(59,130,246,0.18);
-    overflow: hidden;
-}
-
-.save-loading-bar{
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 35%;
-    border-radius: 999px;
-    background: #3b82f6;
-    animation: save-indeterminate 0.9s infinite ease-in-out;
-}
-
-.save-loading-text{
-    font-size: 12px;
-    color: #6b7280;
-    white-space: nowrap;
-}
-
-@keyframes save-indeterminate{
-    0%   { transform: translateX(-120%); }
-    100% { transform: translateX(360%); }
-}
-
-/* 단원 목록 카드 */
+/* ======================
+   단원 목록 카드
+   ====================== */
 
 .units-section {
     background: #ffffff;
@@ -230,7 +216,9 @@ body {
     color: #111827;
 }
 
-/* 반응형 */
+/* ======================
+   반응형
+   ====================== */
 
 @media (max-width: 900px) {
     .app-container {
@@ -241,15 +229,22 @@ body {
         width: 100%;
         flex-direction: row;
         overflow-x: auto;
+
+        /* 모바일에서는 높이 고정 해제 */
+        height: auto;
+        overflow: auto;
     }
 
-    /* ✅ 모바일에서 로딩바 폭이 너무 딱딱하면 유연하게 */
-    .header-actions{
-        min-width: 0;
-        align-items: flex-start;
+    /* 모바일에서는 학교만 스크롤 구조 해제 */
+    .sidebar-section:last-child {
+        flex: 0 0 auto;
+        min-height: initial;
     }
 
-    .save-loading{
-        width: 100%;
+    #schoolList {
+        overflow-y: visible;
+        flex: 0 0 auto;
+        min-height: initial;
+        padding-right: 0;
     }
 }
