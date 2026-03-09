@@ -40,7 +40,7 @@ def get_sheets():
     """
     creds = get_credentials()
     gc = gspread.authorize(creds)
-    sh = gc.open_by_key(SPREADSHEET_ID)T
+    sh = gc.open_by_key(SPREADSHEET_ID)
 
     try:
         units_ws = sh.worksheet("units")
