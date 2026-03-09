@@ -36,18 +36,18 @@ def get_credentials():
 
 def get_sheets():
     """
-    gspread 클라이언트를 만들고, 필요한 worksheet 3개(units, school, records)를 반환
+    gspread 클라이언트를 만들고, 필요한 worksheet 3개(units, 1학기학사일정, records)를 반환
     """
     creds = get_credentials()
     gc = gspread.authorize(creds)
-    sh = gc.open_by_key(SPREADSHEET_ID)
+    sh = gc.open_by_key(SPREADSHEET_ID)T
 
     try:
         units_ws = sh.worksheet("units")
-        school_ws = sh.worksheet("school")
+        school_ws = sh.worksheet("1학기학사일정")
         records_ws = sh.worksheet("records")
     except Exception as e:
-        raise RuntimeError(f"시트 이름(units/school/records)을 찾을 수 없습니다: {e}")
+        raise RuntimeError(f"시트 이름(units/1학기학사일정/records)을 찾을 수 없습니다: {e}")
 
     return units_ws, school_ws, records_ws
 
