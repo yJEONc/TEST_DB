@@ -99,7 +99,7 @@ def api_data():
         # 학교 목록
         schools = []
         for row in school_records:
-            name = str(row.get("school") or "").strip()
+            name = str(row.get("학교") or "").strip()
             if name:
                 schools.append(name)
         schools = sorted(set(schools))
