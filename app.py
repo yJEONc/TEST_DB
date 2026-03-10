@@ -94,7 +94,7 @@ def api_data():
         number_idx = get_header_index(units_headers, "number")
         unit_idx = get_header_index(units_headers, "units")
 
-        current_school_idx = get_header_index(school_headers, "현재학교")
+        current_school_idx = get_header_index(school_headers, "현재 학교")
 
         grade_set = set()
         units_by_grade = {}
@@ -123,7 +123,7 @@ def api_data():
 
         grades = sorted(grade_set, key=grade_key)
 
-        # 학교 목록 처리 (class+ 시트의 현재학교 기준)
+        # 학교 목록 처리 (class+ 시트의 현재 학교 기준)
         schools = []
         for row in school_data:
             name = row[current_school_idx].strip() if len(row) > current_school_idx else ""
