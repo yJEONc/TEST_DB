@@ -52,6 +52,16 @@ def get_sheets():
     return units_ws, school_ws, records_ws
 
 
+def get_header_index(headers, target_name):
+    """
+    헤더 리스트에서 target_name의 인덱스를 반환
+    """
+    try:
+        return headers.index(target_name)
+    except ValueError:
+        raise RuntimeError(f"헤더 '{target_name}' 를 찾을 수 없습니다. 현재 헤더: {headers}")
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -64,30 +74,47 @@ def api_data():
     """
     try:
         units_ws, school_ws, _ = get_sheets()
-        units_records = units_ws.get_all_records()
-        school_records = school_ws.get_all_records()
+
+        # 중복 헤더 때문에 get_all_records() 대신 get_all_values() 사용
+        units_rows = units_ws.get_all_values()
+        school_rows = school_ws.get_all_values()
+
+        if not units_rows:
+            raise RuntimeError("units 시트가 비어 있습니다.")
+        if not school_rows:
+            raise RuntimeError("class+ 시트가 비어 있습니다.")
+
+        units_headers = units_rows[0]
+        units_data = units_rows[1:]
+
+        school_headers = school_rows[0]
+        school_data = school_rows[1:]
+
+        grade_idx = get_header_index(units_headers, "grade")
+        number_idx = get_header_index(units_headers, "number")
+        unit_idx = get_header_index(units_headers, "units")
+
+        current_school_idx = get_header_index(school_headers, "현재학교")
 
         grade_set = set()
         units_by_grade = {}
 
-        # units 시트: grade, number, units
-        for row in units_records:
-            grade_raw = row.get("grade")
-            number = str(row.get("number") or "").strip()
-            unit_name = str(row.get("units") or "").strip()
+        # units 시트 처리
+        for row in units_data:
+            grade_raw = row[grade_idx].strip() if len(row) > grade_idx else ""
+            number = row[number_idx].strip() if len(row) > number_idx else ""
+            unit_name = row[unit_idx].strip() if len(row) > unit_idx else ""
 
-            if grade_raw is None or not number or not unit_name:
+            if not grade_raw or not number or not unit_name:
                 continue
 
-            grade_str = str(grade_raw).strip()
-            grade_set.add(grade_str)
-
-            units_by_grade.setdefault(grade_str, []).append({
+            grade_set.add(grade_raw)
+            units_by_grade.setdefault(grade_raw, []).append({
                 "number": number,
                 "unit": unit_name,
             })
 
-        # 학년 정렬 (1,2,3 ...)
+        # 학년 정렬
         def grade_key(g):
             try:
                 return int(g)
@@ -96,12 +123,13 @@ def api_data():
 
         grades = sorted(grade_set, key=grade_key)
 
-        # 학교 목록 (class+ 시트의 '현재학교' 헤더 기준)
+        # 학교 목록 처리 (class+ 시트의 현재학교 기준)
         schools = []
-        for row in school_records:
-            name = str(row.get("현재학교") or "").strip()
+        for row in school_data:
+            name = row[current_school_idx].strip() if len(row) > current_school_idx else ""
             if name:
                 schools.append(name)
+
         schools = sorted(set(schools))
 
         return jsonify({
@@ -112,7 +140,6 @@ def api_data():
         })
 
     except Exception as e:
-        # 디버깅용으로 에러 메시지도 내려줌
         return jsonify({
             "ok": False,
             "error": str(e),
@@ -149,7 +176,6 @@ def api_save():
         if not rows:
             return jsonify({"ok": False, "error": "저장할 단원이 없습니다."}), 400
 
-        # 여러 줄 한 번에 추가
         records_ws.append_rows(rows)
 
         return jsonify({"ok": True, "saved": len(rows)})
@@ -158,7 +184,6 @@ def api_save():
         return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()}), 500
 
 
-# 디버깅 유지용 (원하면 사용)
 @app.route("/api/debug")
 def api_debug():
     result = {}
@@ -172,6 +197,22 @@ def api_debug():
         sh = gc.open_by_key(SPREADSHEET_ID)
         ws_list = sh.worksheets()
         result["worksheets"] = [w.title for w in ws_list]
+
+        # 헤더 확인용
+        try:
+            class_ws = sh.worksheet("class+")
+            class_rows = class_ws.get_all_values()
+            result["class+_headers"] = class_rows[0] if class_rows else []
+        except Exception as inner_e:
+            result["class+_headers_error"] = str(inner_e)
+
+        try:
+            units_ws = sh.worksheet("units")
+            units_rows = units_ws.get_all_values()
+            result["units_headers"] = units_rows[0] if units_rows else []
+        except Exception as inner_e:
+            result["units_headers_error"] = str(inner_e)
+
         result["status"] = "OK"
     except Exception as e:
         result["credential_status"] = "ERROR"
@@ -181,5 +222,4 @@ def api_debug():
 
 
 if __name__ == "__main__":
-    # 로컬 테스트용
     app.run(debug=True)
