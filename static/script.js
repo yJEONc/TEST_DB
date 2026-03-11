@@ -1,45 +1,11 @@
 let grades = [];
 let schools = [];
 let unitsByGrade = {};
+let endSchoolMap = {};
 
 let selectedGrade = null;
 let selectedSchool = null;
-let selectedUnits = new Set(); // "number|unit" 형태로 저장
-
-let isSaving = false;
-
-/* ✅ 저장 UI 토글 (로딩바 + 버튼 잠금/문구 변경) */
-function setSavingUI(on) {
-    const loading = document.getElementById("saveLoading");
-    const btn = document.getElementById("saveBtn");
-    if (!btn) return;
-
-    if (on) {
-        isSaving = true;
-
-        if (loading) {
-            loading.classList.add("active");
-            loading.setAttribute("aria-hidden", "false");
-        }
-
-        btn.disabled = true; // 중복 클릭 방지
-        btn.dataset.prevText = btn.textContent;
-        btn.textContent = "저장 중...";
-
-    } else {
-        isSaving = false;
-
-        if (loading) {
-            loading.classList.remove("active");
-            loading.setAttribute("aria-hidden", "true");
-        }
-
-        btn.textContent = btn.dataset.prevText || "선택 저장";
-
-        // 현재 선택 상태에 맞춰 버튼 활성/비활성 복구
-        updateSaveButton();
-    }
-}
+let selectedUnits = new Set();
 
 async function fetchData() {
     try {
@@ -55,12 +21,25 @@ async function fetchData() {
         grades = data.grades || [];
         schools = data.schools || [];
         unitsByGrade = data.unitsByGrade || {};
+        endSchoolMap = data.endSchoolMap || {};
+
+        const currentTermDisplay = document.getElementById("currentTermDisplay");
+        if (currentTermDisplay) {
+            currentTermDisplay.textContent = data.currentTermName
+                ? `현재 기준 : ${data.currentTermName}`
+                : "";
+        }
+
+        const endCacheInfo = document.getElementById("endCacheInfo");
+        if (endCacheInfo) {
+            endCacheInfo.textContent = data.endCacheUpdatedAt
+                ? `end 캐시 갱신 시각 : ${data.endCacheUpdatedAt}`
+                : "end 캐시 갱신 시각 : 없음";
+        }
 
         renderGradeList();
         renderSchoolList();
         renderUnits();
-
-        // ✅ 초기 요약/버튼 상태도 맞춰주기(원래는 학년/학교 눌러야 갱신됐음)
         updateSummary();
         updateSaveButton();
     } catch (err) {
@@ -72,18 +51,24 @@ async function fetchData() {
 function renderGradeList() {
     const ul = document.getElementById("gradeList");
     ul.innerHTML = "";
+
     grades.forEach(g => {
         const li = document.createElement("li");
         li.className = "sidebar-item" + (selectedGrade === g ? " active" : "");
-        li.textContent = `중학교 ${g}학년`;
-        li.onclick = () => {
+        li.textContent = g + "학년";
+
+        li.addEventListener("click", () => {
             selectedGrade = g;
-            selectedUnits.clear(); // 학년 변경 시 선택 초기화
+            selectedSchool = null;
+            selectedUnits.clear();
+
             renderGradeList();
+            renderSchoolList();
             renderUnits();
             updateSummary();
             updateSaveButton();
-        };
+        });
+
         ul.appendChild(li);
     });
 }
@@ -91,22 +76,28 @@ function renderGradeList() {
 function renderSchoolList() {
     const ul = document.getElementById("schoolList");
     ul.innerHTML = "";
+
+    const highlightedSchools = new Set(endSchoolMap[selectedGrade] || []);
+
     schools.forEach(school => {
         const li = document.createElement("li");
         li.className = "sidebar-item" + (selectedSchool === school ? " active" : "");
         li.textContent = school;
 
-        li.onclick = () => {
-            selectedSchool = school;
+        if (selectedGrade && highlightedSchools.has(school)) {
+            li.classList.add("school-done");
+            li.title = "end 시트에 이미 등록된 학교입니다.";
+        }
 
-            // 🔥 추가: 학교 변경 시 단원 선택 초기화
+        li.addEventListener("click", () => {
+            selectedSchool = school;
             selectedUnits.clear();
-            renderUnits();
 
             renderSchoolList();
+            renderUnits();
             updateSummary();
             updateSaveButton();
-        };
+        });
 
         ul.appendChild(li);
     });
@@ -117,136 +108,133 @@ function renderUnits() {
     container.innerHTML = "";
 
     if (!selectedGrade) {
-        const p = document.createElement("p");
-        p.textContent = "왼쪽에서 학년을 먼저 선택하세요.";
-        p.style.fontSize = "14px";
-        p.style.color = "#6b7280";
-        container.appendChild(p);
+        container.innerHTML = "<p>학년을 먼저 선택하세요.</p>";
         return;
     }
 
-    const list = unitsByGrade[selectedGrade] || [];
-    if (list.length === 0) {
-        const p = document.createElement("p");
-        p.textContent = "등록된 단원이 없습니다.";
-        container.appendChild(p);
+    const units = unitsByGrade[selectedGrade] || [];
+
+    if (units.length === 0) {
+        container.innerHTML = "<p>표시할 단원이 없습니다.</p>";
         return;
     }
 
-    list.forEach(item => {
+    units.forEach(item => {
         const key = `${item.number}|${item.unit}`;
-        const wrapper = document.createElement("div");
-        wrapper.className = "unit-item";
+
+        const label = document.createElement("label");
+        label.className = "unit-item";
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = selectedUnits.has(key);
-        checkbox.onchange = () => {
+
+        checkbox.addEventListener("change", () => {
             if (checkbox.checked) {
                 selectedUnits.add(key);
             } else {
                 selectedUnits.delete(key);
             }
             updateSaveButton();
-            updateSummary(); // ✅ 단원 선택 개수까지 summary에 반영하고 싶으면 유지(원래는 안 했음)
-        };
+        });
 
-        const codeSpan = document.createElement("span");
-        codeSpan.className = "unit-code";
-        codeSpan.textContent = item.number;
+        const span = document.createElement("span");
+        span.textContent = `${item.number}. ${item.unit}`;
 
-        const nameSpan = document.createElement("span");
-        nameSpan.className = "unit-name";
-        nameSpan.textContent = item.unit;
-
-        wrapper.onclick = (e) => {
-            if (e.target !== checkbox) {
-                checkbox.checked = !checkbox.checked;
-                checkbox.onchange();
-            }
-        };
-
-        wrapper.appendChild(checkbox);
-        wrapper.appendChild(codeSpan);
-        wrapper.appendChild(nameSpan);
-        container.appendChild(wrapper);
+        label.appendChild(checkbox);
+        label.appendChild(span);
+        container.appendChild(label);
     });
 }
 
 function updateSummary() {
     const summary = document.getElementById("selectionSummary");
 
-    // ✅ 단원 선택 개수까지 보여주면(스크린샷처럼) UX가 좋아서 넣어둠
-    const unitCount = selectedUnits.size;
-
-    if (selectedGrade && selectedSchool) {
-        summary.textContent = `중학교 ${selectedGrade}학년 / ${selectedSchool} / 선택 단원: ${unitCount}개`;
-    } else if (selectedGrade) {
-        summary.textContent = `중학교 ${selectedGrade}학년을 선택했습니다. 학교를 선택하세요.`;
-    } else if (selectedSchool) {
-        summary.textContent = `${selectedSchool}을(를) 선택했습니다. 학년을 선택하세요.`;
-    } else {
+    if (!selectedGrade && !selectedSchool) {
         summary.textContent = "학년과 학교를 선택하세요.";
-    }
-}
-
-function updateSaveButton() {
-    const btn = document.getElementById("saveBtn");
-
-    // ✅ 저장 중엔 무조건 잠금 유지
-    if (isSaving) {
-        btn.disabled = true;
         return;
     }
 
-    if (selectedGrade && selectedSchool && selectedUnits.size > 0) {
-        btn.disabled = false;
-    } else {
-        btn.disabled = true;
+    if (selectedGrade && !selectedSchool) {
+        summary.textContent = `${selectedGrade}학년을 선택했습니다. 학교를 선택하세요.`;
+        return;
     }
+
+    summary.textContent = `${selectedGrade}학년 / ${selectedSchool}`;
+}
+
+function updateSaveButton() {
+    const saveBtn = document.getElementById("saveBtn");
+    saveBtn.disabled = !(selectedGrade && selectedSchool && selectedUnits.size > 0);
 }
 
 async function saveSelection() {
-    // ✅ 저장 중이면 무시(중복 클릭 방지)
-    if (isSaving) return;
+    if (!(selectedGrade && selectedSchool && selectedUnits.size > 0)) {
+        return;
+    }
 
-    if (!selectedGrade || !selectedSchool || selectedUnits.size === 0) return;
-
-    setSavingUI(true);
-
-    const units = Array.from(selectedUnits).map(key => {
-        const [number, unit] = key.split("|");
+    const units = Array.from(selectedUnits).map(v => {
+        const [number, unit] = v.split("|");
         return { number, unit };
     });
-
-    const payload = {
-        grade: selectedGrade,
-        school: selectedSchool,
-        units
-    };
 
     try {
         const res = await fetch("/api/save", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                grade: selectedGrade,
+                school: selectedSchool,
+                units: units
+            })
         });
+
         const data = await res.json();
 
-        if (data.ok) {
-            alert(`저장 완료! (${data.saved}개 단원)`);
-        } else {
-            alert("저장 중 오류: " + (data.error || "알 수 없는 오류"));
+        if (!data.ok) {
+            alert("저장 실패: " + (data.error || "알 수 없는 오류"));
+            return;
         }
+
+        alert(`저장 완료: ${data.saved}건`);
     } catch (err) {
         console.error(err);
-        alert("저장 요청 중 오류가 발생했습니다.");
-    } finally {
-        setSavingUI(false);
+        alert("저장 중 오류가 발생했습니다.");
     }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    fetchData();
-    document.getElementById("saveBtn").addEventListener("click", saveSelection);
-});
+async function refreshEndCache() {
+    const btn = document.getElementById("refreshEndBtn");
+    const originalText = btn.textContent;
+
+    try {
+        btn.disabled = true;
+        btn.textContent = "업데이트 중...";
+
+        const res = await fetch("/api/refresh_end_cache", {
+            method: "POST"
+        });
+        const data = await res.json();
+
+        if (!data.ok) {
+            alert("end 시트 업데이트 실패: " + (data.error || ""));
+            return;
+        }
+
+        await fetchData();
+        alert("end 시트 캐시를 업데이트했습니다.");
+    } catch (err) {
+        console.error(err);
+        alert("end 시트 업데이트 중 오류가 발생했습니다.");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
+document.getElementById("saveBtn").addEventListener("click", saveSelection);
+document.getElementById("refreshEndBtn").addEventListener("click", refreshEndCache);
+
+fetchData();
