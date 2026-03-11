@@ -7,43 +7,30 @@
 </head>
 <body>
 <div class="app-container">
-    <!-- 사이드바 -->
     <aside class="sidebar">
         <div class="sidebar-section">
             <h2 class="sidebar-title">학년</h2>
-            <ul id="gradeList" class="sidebar-list">
-                <!-- JS로 채움 -->
-            </ul>
+            <ul id="gradeList" class="sidebar-list"></ul>
         </div>
         <div class="sidebar-section">
             <h2 class="sidebar-title">학교</h2>
-            <ul id="schoolList" class="sidebar-list">
-                <!-- JS로 채움 -->
-            </ul>
+            <ul id="schoolList" class="sidebar-list"></ul>
         </div>
     </aside>
 
-    <!-- 메인 영역 -->
     <main class="main-content">
         <header class="main-header">
             <div>
                 <h1 class="app-title">중학교 과학 단원 선택</h1>
-
-                <!-- 현재 시험 기준 표시 -->
                 <p id="currentTermDisplay" class="term-display"></p>
-
-                <p id="selectionSummary" class="summary-text">
-                    학년과 학교를 선택하세요.
-                </p>
+                <p id="endCacheInfo" class="cache-info"></p>
+                <p id="selectionSummary" class="summary-text">학년과 학교를 선택하세요.</p>
             </div>
 
-            <!-- 버튼 + 로딩바 -->
             <div class="header-actions">
-                <button id="saveBtn" class="primary-btn" disabled>
-                    선택 저장
-                </button>
+                <button id="refreshEndBtn" class="secondary-btn" type="button">end 시트 업데이트</button>
+                <button id="saveBtn" class="primary-btn" disabled>선택 저장</button>
 
-                <!-- 저장 로딩바 -->
                 <div id="saveLoading" class="save-loading" aria-hidden="true">
                     <div class="save-loading-track">
                         <div class="save-loading-bar"></div>
@@ -55,47 +42,11 @@
 
         <section class="units-section">
             <h2 class="section-title">단원 목록</h2>
-            <div id="unitList" class="unit-list">
-                <!-- JS로 채움 -->
-            </div>
+            <div id="unitList" class="unit-list"></div>
         </section>
     </main>
 </div>
 
 <script src="{{ url_for('static', filename='script.js') }}"></script>
-
-<script>
-
-/*
-현재 설정된 시험 기준 표시
-예:
-현재 기준 : 1학기_중간
-*/
-
-async function loadCurrentTerm() {
-    try {
-
-        const res = await fetch("/api/data");
-        const data = await res.json();
-
-        if (!data.ok) return;
-
-        const term = data.currentTermName || "";
-
-        const el = document.getElementById("currentTermDisplay");
-
-        if (term) {
-            el.innerText = "현재 기준 : " + term;
-        }
-
-    } catch (err) {
-        console.error(err);
-    }
-}
-
-loadCurrentTerm();
-
-</script>
-
 </body>
 </html>
