@@ -3,7 +3,6 @@ import datetime
 import os
 import json
 import traceback
-import re
 import threading
 
 import gspread
@@ -75,39 +74,11 @@ def safe_cell(row, idx):
     return row[idx].strip() if len(row) > idx and row[idx] is not None else ""
 
 
-def parse_start_date(text):
-    if not text:
-        return None
-
-    s = str(text).strip()
-    if not s or s in {"미정", "예정", "-", "?", "미확정"}:
-        return None
-
-    s = s.replace("년", ".").replace("월", ".").replace("일", "")
-    s = s.replace("/", ".")
-    s = re.sub(r"\s+", "", s)
-
-    m = re.search(r"(\d{4})\.(\d{1,2})\.(\d{1,2})", s)
-    if m:
-        y, mo, d = map(int, m.groups())
-        try:
-            return datetime.date(y, mo, d)
-        except ValueError:
-            return None
-
-    m = re.search(r"(\d{1,2})\.(\d{1,2})", s)
-    if m:
-        mo, d = map(int, m.groups())
-        y = datetime.date.today().year
-        try:
-            return datetime.date(y, mo, d)
-        except ValueError:
-            return None
-
-    return None
-
-
 def get_current_sort_header(settings_ws):
+    """
+    settings!A1 값을 그대로 읽음
+    예: 1학기_중간_시험기간
+    """
     val = settings_ws.acell("A1").value
     val = (val or "").strip()
 
@@ -118,16 +89,14 @@ def get_current_sort_header(settings_ws):
 
 
 def get_current_term_name(settings_ws):
+    """
+    settings!A1 값에서 '_시험기간' 제거
+    예: 1학기_중간_시험기간 -> 1학기_중간
+    """
     header_name = get_current_sort_header(settings_ws)
     if header_name.endswith("_시험기간"):
         return header_name[:-5]
     return header_name
-
-
-def school_sort_key(item):
-    dt = item["date"]
-    school = item["school"]
-    return (dt is None, dt or datetime.date.max, school)
 
 
 def build_end_school_map_from_rows(end_rows):
@@ -219,12 +188,10 @@ def api_data():
 
         current_school_idx = get_header_index(school_headers, "현재 학교")
 
-        current_sort_header = get_current_sort_header(settings_ws)
-        sort_idx = get_header_index(school_headers, current_sort_header)
-
         grade_set = set()
         units_by_grade = {}
 
+        # units 시트 처리
         for row in units_data:
             grade_raw = safe_cell(row, grade_idx)
             number = safe_cell(row, number_idx)
@@ -247,31 +214,15 @@ def api_data():
 
         grades = sorted(grade_set, key=grade_key)
 
-        school_map = {}
+        # 학교 목록 처리: 현재 학교 기준, 중복 제거 후 가나다순
+        school_set = set()
 
         for row in school_data:
             school_name = safe_cell(row, current_school_idx)
-            sort_text = safe_cell(row, sort_idx)
+            if school_name:
+                school_set.add(school_name)
 
-            if not school_name:
-                continue
-
-            parsed_date = parse_start_date(sort_text)
-
-            if school_name not in school_map:
-                school_map[school_name] = {
-                    "school": school_name,
-                    "date": parsed_date,
-                }
-            else:
-                old_date = school_map[school_name]["date"]
-                if old_date is None and parsed_date is not None:
-                    school_map[school_name]["date"] = parsed_date
-                elif old_date is not None and parsed_date is not None and parsed_date < old_date:
-                    school_map[school_name]["date"] = parsed_date
-
-        sorted_school_items = sorted(school_map.values(), key=school_sort_key)
-        schools = [item["school"] for item in sorted_school_items]
+        schools = sorted(school_set)
 
         end_cache = ensure_end_cache()
 
@@ -280,7 +231,7 @@ def api_data():
             "grades": grades,
             "schools": schools,
             "unitsByGrade": units_by_grade,
-            "currentSortHeader": current_sort_header,
+            "currentSortHeader": get_current_sort_header(settings_ws),
             "currentTermName": get_current_term_name(settings_ws),
             "endSchoolMap": end_cache["end_school_map"],
             "endCacheUpdatedAt": end_cache["updated_at"],
@@ -337,6 +288,12 @@ def api_save():
             if not number or not unit_name:
                 continue
 
+            # A: 날짜
+            # B: 학년
+            # C: 학교
+            # D: 단원 번호
+            # E: 단원명
+            # F: 현재 시험 구분 (예: 1학기_중간)
             rows.append([today, grade, school, number, unit_name, current_term_name])
 
         if not rows:
