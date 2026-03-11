@@ -5,7 +5,53 @@ let endSchoolMap = {};
 
 let selectedGrade = null;
 let selectedSchool = null;
-let selectedUnits = new Set();
+let selectedUnits = new Set(); // "number|unit" 형태로 저장
+
+let isSaving = false;
+let isRefreshingEnd = false;
+
+/* ✅ 저장 UI 토글 (로딩바 + 버튼 잠금/문구 변경) */
+function setSavingUI(on) {
+    const loading = document.getElementById("saveLoading");
+    const btn = document.getElementById("saveBtn");
+    if (!btn) return;
+
+    if (on) {
+        isSaving = true;
+
+        if (loading) {
+            loading.classList.add("active");
+            loading.setAttribute("aria-hidden", "false");
+        }
+
+        btn.disabled = true;
+        btn.dataset.prevText = btn.textContent;
+        btn.textContent = "저장 중...";
+    } else {
+        isSaving = false;
+
+        if (loading) {
+            loading.classList.remove("active");
+            loading.setAttribute("aria-hidden", "true");
+        }
+
+        btn.textContent = btn.dataset.prevText || "선택 저장";
+        updateSaveButton();
+    }
+}
+
+function updateHeaderInfo(data) {
+    const currentTermDisplay = document.getElementById("currentTermDisplay");
+    const endCacheInfo = document.getElementById("endCacheInfo");
+
+    if (currentTermDisplay) {
+        currentTermDisplay.textContent = `현재 기준 : ${data.currentTermName || "-"}`;
+    }
+
+    if (endCacheInfo) {
+        endCacheInfo.textContent = `end 캐시 갱신 시각 : ${data.endCacheUpdatedAt || "-"}`;
+    }
+}
 
 async function fetchData() {
     try {
@@ -23,20 +69,7 @@ async function fetchData() {
         unitsByGrade = data.unitsByGrade || {};
         endSchoolMap = data.endSchoolMap || {};
 
-        const currentTermDisplay = document.getElementById("currentTermDisplay");
-        if (currentTermDisplay) {
-            currentTermDisplay.textContent = data.currentTermName
-                ? `현재 기준 : ${data.currentTermName}`
-                : "";
-        }
-
-        const endCacheInfo = document.getElementById("endCacheInfo");
-        if (endCacheInfo) {
-            endCacheInfo.textContent = data.endCacheUpdatedAt
-                ? `end 캐시 갱신 시각 : ${data.endCacheUpdatedAt}`
-                : "end 캐시 갱신 시각 : 없음";
-        }
-
+        updateHeaderInfo(data);
         renderGradeList();
         renderSchoolList();
         renderUnits();
@@ -55,19 +88,17 @@ function renderGradeList() {
     grades.forEach(g => {
         const li = document.createElement("li");
         li.className = "sidebar-item" + (selectedGrade === g ? " active" : "");
-        li.textContent = g + "학년";
+        li.textContent = `중학교 ${g}학년`;
 
-        li.addEventListener("click", () => {
+        li.onclick = () => {
             selectedGrade = g;
-            selectedSchool = null;
             selectedUnits.clear();
-
             renderGradeList();
             renderSchoolList();
             renderUnits();
             updateSummary();
             updateSaveButton();
-        });
+        };
 
         ul.appendChild(li);
     });
@@ -81,23 +112,31 @@ function renderSchoolList() {
 
     schools.forEach(school => {
         const li = document.createElement("li");
-        li.className = "sidebar-item" + (selectedSchool === school ? " active" : "");
+        let className = "sidebar-item";
+
+        if (selectedSchool === school) {
+            className += " active";
+        }
+
+        if (selectedGrade && highlightedSchools.has(school)) {
+            className += " school-done";
+        }
+
+        li.className = className;
         li.textContent = school;
 
         if (selectedGrade && highlightedSchools.has(school)) {
-            li.classList.add("school-done");
             li.title = "end 시트에 이미 등록된 학교입니다.";
         }
 
-        li.addEventListener("click", () => {
+        li.onclick = () => {
             selectedSchool = school;
             selectedUnits.clear();
-
-            renderSchoolList();
             renderUnits();
+            renderSchoolList();
             updateSummary();
             updateSaveButton();
-        });
+        };
 
         ul.appendChild(li);
     });
@@ -108,109 +147,138 @@ function renderUnits() {
     container.innerHTML = "";
 
     if (!selectedGrade) {
-        container.innerHTML = "<p>학년을 먼저 선택하세요.</p>";
+        const p = document.createElement("p");
+        p.textContent = "왼쪽에서 학년을 먼저 선택하세요.";
+        p.style.fontSize = "14px";
+        p.style.color = "#6b7280";
+        container.appendChild(p);
         return;
     }
 
-    const units = unitsByGrade[selectedGrade] || [];
-
-    if (units.length === 0) {
-        container.innerHTML = "<p>표시할 단원이 없습니다.</p>";
+    const list = unitsByGrade[selectedGrade] || [];
+    if (list.length === 0) {
+        const p = document.createElement("p");
+        p.textContent = "등록된 단원이 없습니다.";
+        container.appendChild(p);
         return;
     }
 
-    units.forEach(item => {
+    list.forEach(item => {
         const key = `${item.number}|${item.unit}`;
 
-        const label = document.createElement("label");
-        label.className = "unit-item";
+        const wrapper = document.createElement("div");
+        wrapper.className = "unit-item";
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = selectedUnits.has(key);
-
-        checkbox.addEventListener("change", () => {
+        checkbox.onchange = () => {
             if (checkbox.checked) {
                 selectedUnits.add(key);
             } else {
                 selectedUnits.delete(key);
             }
             updateSaveButton();
-        });
+            updateSummary();
+        };
 
-        const span = document.createElement("span");
-        span.textContent = `${item.number}. ${item.unit}`;
+        const codeSpan = document.createElement("span");
+        codeSpan.className = "unit-code";
+        codeSpan.textContent = item.number;
 
-        label.appendChild(checkbox);
-        label.appendChild(span);
-        container.appendChild(label);
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "unit-name";
+        nameSpan.textContent = item.unit;
+
+        wrapper.onclick = (e) => {
+            if (e.target !== checkbox) {
+                checkbox.checked = !checkbox.checked;
+                checkbox.onchange();
+            }
+        };
+
+        wrapper.appendChild(checkbox);
+        wrapper.appendChild(codeSpan);
+        wrapper.appendChild(nameSpan);
+        container.appendChild(wrapper);
     });
 }
 
 function updateSummary() {
     const summary = document.getElementById("selectionSummary");
+    const unitCount = selectedUnits.size;
 
-    if (!selectedGrade && !selectedSchool) {
+    if (selectedGrade && selectedSchool) {
+        summary.textContent = `중학교 ${selectedGrade}학년 / ${selectedSchool} / 선택 단원: ${unitCount}개`;
+    } else if (selectedGrade) {
+        summary.textContent = `중학교 ${selectedGrade}학년을 선택했습니다. 학교를 선택하세요.`;
+    } else if (selectedSchool) {
+        summary.textContent = `${selectedSchool}을(를) 선택했습니다. 학년을 선택하세요.`;
+    } else {
         summary.textContent = "학년과 학교를 선택하세요.";
-        return;
     }
-
-    if (selectedGrade && !selectedSchool) {
-        summary.textContent = `${selectedGrade}학년을 선택했습니다. 학교를 선택하세요.`;
-        return;
-    }
-
-    summary.textContent = `${selectedGrade}학년 / ${selectedSchool}`;
 }
 
 function updateSaveButton() {
-    const saveBtn = document.getElementById("saveBtn");
-    saveBtn.disabled = !(selectedGrade && selectedSchool && selectedUnits.size > 0);
-}
+    const btn = document.getElementById("saveBtn");
+    if (!btn) return;
 
-async function saveSelection() {
-    if (!(selectedGrade && selectedSchool && selectedUnits.size > 0)) {
+    if (isSaving) {
+        btn.disabled = true;
         return;
     }
 
-    const units = Array.from(selectedUnits).map(v => {
-        const [number, unit] = v.split("|");
+    btn.disabled = !(selectedGrade && selectedSchool && selectedUnits.size > 0);
+}
+
+async function saveSelection() {
+    if (isSaving) return;
+    if (!selectedGrade || !selectedSchool || selectedUnits.size === 0) return;
+
+    setSavingUI(true);
+
+    const units = Array.from(selectedUnits).map(key => {
+        const [number, unit] = key.split("|");
         return { number, unit };
     });
+
+    const payload = {
+        grade: selectedGrade,
+        school: selectedSchool,
+        units
+    };
 
     try {
         const res = await fetch("/api/save", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                grade: selectedGrade,
-                school: selectedSchool,
-                units: units
-            })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
         });
-
         const data = await res.json();
 
-        if (!data.ok) {
-            alert("저장 실패: " + (data.error || "알 수 없는 오류"));
-            return;
+        if (data.ok) {
+            alert(`저장 완료! (${data.saved}개 단원)`);
+        } else {
+            alert("저장 중 오류: " + (data.error || "알 수 없는 오류"));
         }
-
-        alert(`저장 완료: ${data.saved}건`);
     } catch (err) {
         console.error(err);
-        alert("저장 중 오류가 발생했습니다.");
+        alert("저장 요청 중 오류가 발생했습니다.");
+    } finally {
+        setSavingUI(false);
     }
 }
 
 async function refreshEndCache() {
+    if (isRefreshingEnd) return;
+
     const btn = document.getElementById("refreshEndBtn");
-    const originalText = btn.textContent;
+    if (!btn) return;
 
     try {
+        isRefreshingEnd = true;
         btn.disabled = true;
+        btn.dataset.prevText = btn.textContent;
         btn.textContent = "업데이트 중...";
 
         const res = await fetch("/api/refresh_end_cache", {
@@ -219,7 +287,7 @@ async function refreshEndCache() {
         const data = await res.json();
 
         if (!data.ok) {
-            alert("end 시트 업데이트 실패: " + (data.error || ""));
+            alert("end 시트 업데이트 실패: " + (data.error || "알 수 없는 오류"));
             return;
         }
 
@@ -229,12 +297,22 @@ async function refreshEndCache() {
         console.error(err);
         alert("end 시트 업데이트 중 오류가 발생했습니다.");
     } finally {
+        isRefreshingEnd = false;
         btn.disabled = false;
-        btn.textContent = originalText;
+        btn.textContent = btn.dataset.prevText || "end 시트 업데이트";
     }
 }
 
-document.getElementById("saveBtn").addEventListener("click", saveSelection);
-document.getElementById("refreshEndBtn").addEventListener("click", refreshEndCache);
+document.addEventListener("DOMContentLoaded", () => {
+    fetchData();
 
-fetchData();
+    const saveBtn = document.getElementById("saveBtn");
+    if (saveBtn) {
+        saveBtn.addEventListener("click", saveSelection);
+    }
+
+    const refreshEndBtn = document.getElementById("refreshEndBtn");
+    if (refreshEndBtn) {
+        refreshEndBtn.addEventListener("click", refreshEndCache);
+    }
+});
