@@ -28,14 +28,22 @@
         <header class="main-header">
             <div>
                 <h1 class="app-title">중학교 과학 단원 선택</h1>
-                <p id="selectionSummary" class="summary-text">학년과 학교를 선택하세요.</p>
+
+                <!-- 현재 시험 기준 표시 -->
+                <p id="currentTermDisplay" class="term-display"></p>
+
+                <p id="selectionSummary" class="summary-text">
+                    학년과 학교를 선택하세요.
+                </p>
             </div>
 
-            <!-- ✅ 버튼 + 로딩바를 한 묶음으로 -->
+            <!-- 버튼 + 로딩바 -->
             <div class="header-actions">
-                <button id="saveBtn" class="primary-btn" disabled>선택 저장</button>
+                <button id="saveBtn" class="primary-btn" disabled>
+                    선택 저장
+                </button>
 
-                <!-- ✅ 저장 로딩바 (기본 숨김) -->
+                <!-- 저장 로딩바 -->
                 <div id="saveLoading" class="save-loading" aria-hidden="true">
                     <div class="save-loading-track">
                         <div class="save-loading-bar"></div>
@@ -55,5 +63,39 @@
 </div>
 
 <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+<script>
+
+/*
+현재 설정된 시험 기준 표시
+예:
+현재 기준 : 1학기_중간
+*/
+
+async function loadCurrentTerm() {
+    try {
+
+        const res = await fetch("/api/data");
+        const data = await res.json();
+
+        if (!data.ok) return;
+
+        const term = data.currentTermName || "";
+
+        const el = document.getElementById("currentTermDisplay");
+
+        if (term) {
+            el.innerText = "현재 기준 : " + term;
+        }
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+loadCurrentTerm();
+
+</script>
+
 </body>
 </html>
