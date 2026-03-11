@@ -4,6 +4,7 @@ import os
 import json
 import traceback
 import re
+import threading
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -13,11 +14,18 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 app = Flask(__name__)
 
+# -----------------------------
+# end 시트 캐시
+# -----------------------------
+END_CACHE = {
+    "loaded": False,
+    "end_school_map": {},   # {"1": ["학교A", "학교B"], "2": [...]}
+    "updated_at": None
+}
+END_CACHE_LOCK = threading.Lock()
+
 
 def get_credentials():
-    """
-    SERVICE_KEY 환경 변수에 들어있는 Service Account JSON을 이용해 Credentials 생성
-    """
     raw = os.environ.get("SERVICE_KEY")
     if not raw:
         raise RuntimeError("환경 변수 SERVICE_KEY 가 설정되어 있지 않습니다.")
@@ -42,10 +50,6 @@ def get_spreadsheet():
 
 
 def get_sheets():
-    """
-    필요한 worksheet 반환
-    settings 시트는 반드시 존재한다고 가정
-    """
     sh = get_spreadsheet()
 
     try:
@@ -53,16 +57,14 @@ def get_sheets():
         school_ws = sh.worksheet("class+")
         records_ws = sh.worksheet("records")
         settings_ws = sh.worksheet("settings")
+        end_ws = sh.worksheet("end")
     except Exception as e:
-        raise RuntimeError(f"시트 이름(units/class+/records/settings)을 찾을 수 없습니다: {e}")
+        raise RuntimeError(f"시트 이름(units/class+/records/settings/end)을 찾을 수 없습니다: {e}")
 
-    return units_ws, school_ws, records_ws, settings_ws
+    return units_ws, school_ws, records_ws, settings_ws, end_ws
 
 
 def get_header_index(headers, target_name):
-    """
-    헤더 리스트에서 target_name의 인덱스를 반환
-    """
     try:
         return headers.index(target_name)
     except ValueError:
@@ -74,15 +76,6 @@ def safe_cell(row, idx):
 
 
 def parse_start_date(text):
-    """
-    시험기간 문자열에서 시작일을 최대한 뽑아냄.
-    예:
-    - 2026. 4. 21 ~ 2026. 4. 25
-    - 2026.4.21~4.25
-    - 4/21 ~ 4/25
-    - 4.21
-    - 미정 / 공란 => None
-    """
     if not text:
         return None
 
@@ -94,7 +87,6 @@ def parse_start_date(text):
     s = s.replace("/", ".")
     s = re.sub(r"\s+", "", s)
 
-    # YYYY.M.D
     m = re.search(r"(\d{4})\.(\d{1,2})\.(\d{1,2})", s)
     if m:
         y, mo, d = map(int, m.groups())
@@ -103,7 +95,6 @@ def parse_start_date(text):
         except ValueError:
             return None
 
-    # M.D
     m = re.search(r"(\d{1,2})\.(\d{1,2})", s)
     if m:
         mo, d = map(int, m.groups())
@@ -117,11 +108,6 @@ def parse_start_date(text):
 
 
 def get_current_sort_header(settings_ws):
-    """
-    settings 시트 A1 값을 읽어서 정렬 기준 헤더명으로 사용
-    예:
-    A1 = 1학기_중간_시험기간
-    """
     val = settings_ws.acell("A1").value
     val = (val or "").strip()
 
@@ -132,28 +118,75 @@ def get_current_sort_header(settings_ws):
 
 
 def get_current_term_name(settings_ws):
-    """
-    settings 시트 A1의 값에서 '_시험기간' 제거
-    예:
-    1학기_중간_시험기간 -> 1학기_중간
-    """
     header_name = get_current_sort_header(settings_ws)
-
     if header_name.endswith("_시험기간"):
-        return header_name[:-5]  # "_시험기간" 제거
-
-    # 혹시 A1에 이미 1학기_중간 형태로 들어있으면 그대로 사용
+        return header_name[:-5]
     return header_name
 
 
 def school_sort_key(item):
-    """
-    1순위: 시험기간 시작일(없는 값은 뒤로)
-    2순위: 학교 가나다순
-    """
     dt = item["date"]
     school = item["school"]
     return (dt is None, dt or datetime.date.max, school)
+
+
+def build_end_school_map_from_rows(end_rows):
+    """
+    end 시트에서
+    B열=grade, C열=school 기준으로 학년별 학교 목록 생성
+    """
+    end_school_map = {}
+
+    if not end_rows:
+        return end_school_map
+
+    start_idx = 0
+    if len(end_rows[0]) >= 3:
+        b0 = (end_rows[0][1] or "").strip().lower()
+        c0 = (end_rows[0][2] or "").strip().lower()
+        if b0 == "grade" or c0 == "school":
+            start_idx = 1
+
+    for row in end_rows[start_idx:]:
+        grade_val = row[1].strip() if len(row) > 1 and row[1] else ""
+        school_val = row[2].strip() if len(row) > 2 and row[2] else ""
+
+        if not grade_val or not school_val:
+            continue
+
+        end_school_map.setdefault(grade_val, set()).add(school_val)
+
+    return {
+        grade: sorted(list(schools_set))
+        for grade, schools_set in end_school_map.items()
+    }
+
+
+def refresh_end_cache():
+    """
+    end 시트를 다시 읽어서 캐시 갱신
+    """
+    _, _, _, _, end_ws = get_sheets()
+    end_rows = end_ws.get_all_values()
+    end_school_map = build_end_school_map_from_rows(end_rows)
+
+    with END_CACHE_LOCK:
+        END_CACHE["loaded"] = True
+        END_CACHE["end_school_map"] = end_school_map
+        END_CACHE["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    return END_CACHE
+
+
+def ensure_end_cache():
+    """
+    처음 1번만 end 시트를 읽고, 이후에는 캐시 사용
+    """
+    with END_CACHE_LOCK:
+        if END_CACHE["loaded"]:
+            return END_CACHE
+
+    return refresh_end_cache()
 
 
 @app.route("/")
@@ -163,14 +196,8 @@ def index():
 
 @app.route("/api/data")
 def api_data():
-    """
-    학년/학교/단원 목록을 내려주는 API
-    학교 정렬:
-    1순위: settings!A1 에 적힌 시험기간 헤더 기준 시작일
-    2순위: 학교 가나다순
-    """
     try:
-        units_ws, school_ws, _, settings_ws = get_sheets()
+        units_ws, school_ws, _, settings_ws, _ = get_sheets()
 
         units_rows = units_ws.get_all_values()
         school_rows = school_ws.get_all_values()
@@ -198,7 +225,6 @@ def api_data():
         grade_set = set()
         units_by_grade = {}
 
-        # units 시트 처리
         for row in units_data:
             grade_raw = safe_cell(row, grade_idx)
             number = safe_cell(row, number_idx)
@@ -221,9 +247,6 @@ def api_data():
 
         grades = sorted(grade_set, key=grade_key)
 
-        # 학교 목록 처리
-        # 같은 학교가 여러 번 나와도 1번만 보여주고,
-        # 그 학교의 시험기간 시작일은 가장 빠른 날짜를 사용
         school_map = {}
 
         for row in school_data:
@@ -250,6 +273,8 @@ def api_data():
         sorted_school_items = sorted(school_map.values(), key=school_sort_key)
         schools = [item["school"] for item in sorted_school_items]
 
+        end_cache = ensure_end_cache()
+
         return jsonify({
             "ok": True,
             "grades": grades,
@@ -257,6 +282,8 @@ def api_data():
             "unitsByGrade": units_by_grade,
             "currentSortHeader": current_sort_header,
             "currentTermName": get_current_term_name(settings_ws),
+            "endSchoolMap": end_cache["end_school_map"],
+            "endCacheUpdatedAt": end_cache["updated_at"],
         })
 
     except Exception as e:
@@ -267,15 +294,30 @@ def api_data():
         }), 500
 
 
-@app.route("/api/save", methods=["POST"])
-def api_save():
+@app.route("/api/refresh_end_cache", methods=["POST"])
+def api_refresh_end_cache():
     """
-    선택된 학년/학교/단원들을 records 시트에 저장
-    추가로 F열에 현재 학기/시험 구분값 저장
-    예: 1학기_중간
+    end 시트 수동 업데이트 버튼용
     """
     try:
-        _, _, records_ws, settings_ws = get_sheets()
+        cache = refresh_end_cache()
+        return jsonify({
+            "ok": True,
+            "updatedAt": cache["updated_at"],
+            "gradeCount": len(cache["end_school_map"]),
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "trace": traceback.format_exc(),
+        }), 500
+
+
+@app.route("/api/save", methods=["POST"])
+def api_save():
+    try:
+        _, _, records_ws, settings_ws, _ = get_sheets()
 
         data = request.get_json(force=True) or {}
         grade = str(data.get("grade") or "").strip()
@@ -286,7 +328,7 @@ def api_save():
             return jsonify({"ok": False, "error": "grade, school, units 정보가 필요합니다."}), 400
 
         today = datetime.date.today().isoformat()
-        current_term_name = get_current_term_name(settings_ws)  # 예: 1학기_중간
+        current_term_name = get_current_term_name(settings_ws)
 
         rows = []
         for item in units:
@@ -295,12 +337,6 @@ def api_save():
             if not number or not unit_name:
                 continue
 
-            # A: 날짜
-            # B: 학년
-            # C: 학교
-            # D: 단원 번호
-            # E: 단원명
-            # F: 현재 시험 구분(예: 1학기_중간)
             rows.append([today, grade, school, number, unit_name, current_term_name])
 
         if not rows:
@@ -351,6 +387,11 @@ def api_debug():
             result["current_term_name"] = get_current_term_name(settings_ws)
         except Exception as inner_e:
             result["settings_error"] = str(inner_e)
+
+        with END_CACHE_LOCK:
+            result["end_cache_loaded"] = END_CACHE["loaded"]
+            result["end_cache_updated_at"] = END_CACHE["updated_at"]
+            result["end_cache_grade_keys"] = list(END_CACHE["end_school_map"].keys())
 
         result["status"] = "OK"
 
